@@ -18,16 +18,28 @@ void rodar_comando(char *comando) {
     }
     arg[i] = NULL;
 
-    pid_t pid;
-    pid = fork();
-
-    if (pid < 0) {
-        printf("[ERRO] falha ao criar fork\n");
-        exit(1);
-    } else if (pid == 0) {
-        execvp(arg[0], arg);
-    } else if (pid > 0) {
-        wait(NULL);
+    if (strcmp(arg[0], "cd") == 0) {
+        if (arg[1] == NULL) {
+            printf("Está faltando argumento para o comando\n");
+        } else if (chdir(arg[1]) != 0) {
+            printf("Diretório não encontrado\n");
+        } else {
+            char diretorio[1024];
+            getcwd(diretorio, sizeof(diretorio));
+            printf("Diretório atual: %s\n", diretorio);
+        }
+    } else {
+        pid_t pid;
+        pid = fork();
+    
+        if (pid < 0) {
+            printf("[ERRO] falha ao criar fork\n");
+            exit(1);
+        } else if (pid == 0) {
+            execvp(arg[0], arg);
+        } else if (pid > 0) {
+            wait(NULL);
+        }
     }
 }
 
