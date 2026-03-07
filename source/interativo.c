@@ -18,6 +18,32 @@ char **separar_string(char *string, char **separadas, char *separador, int max) 
     return separadas;
 }
 
+void comando_bg(char *comando, int *pid_bg) {
+    int comando_max = 64;
+    char **comandos = malloc(sizeof(char *) * comando_max);
+    comandos = separar_string(comando, comandos, "&", comando_max);
+
+    char **arg = malloc(sizeof(char *) * comando_max);
+
+    arg = separar_string(comandos[0], arg, " ", comando_max);
+
+    pid_t pid;
+    pid = fork();
+
+    if (pid < 0) {
+        printf("[ERRO] falha ao criar fork\n");
+        exit(1);
+    } else if (pid == 0) {
+        execvp(arg[0], arg);
+    } else {
+        *pid_bg = pid;
+        printf("[1] %d\n", *pid_bg);
+    }
+
+    free(comandos);
+    free(arg);
+}
+
 void comando_red_saida(char * comando_red) {
     int comando_max = 64;
     char **comandos = malloc(sizeof(char *) * comando_max);
@@ -180,10 +206,11 @@ void comando_com_pipe(char *comando_com_pipe) {
     free(arg2);
 }
 
-void verificar_separador_sequencial(char *comandos[], int tamanho) {
+void verificar_separador_sequencial(char *comandos[], int tamanho, int *pid_bg) {
     char c;
     for (int j = 0; j < tamanho; j++) {
         int tem_pipe = 0;
+        int background = 0;
         int redirecionamento = 0;
         int k = 0;
 
@@ -208,20 +235,26 @@ void verificar_separador_sequencial(char *comandos[], int tamanho) {
                 redirecionamento = 1;
                 break;
             }
+            if (c == '&') {
+                comando_bg(comandos[j], pid_bg);
+                background = 1;
+                break;
+            }
             k++;
         }
-        if (tem_pipe == 0 && redirecionamento == 0) {
+        if (tem_pipe == 0 && redirecionamento == 0 && background == 0) {
             rodar_comando_sequencial(comandos[j]);
         }
     }
 }
 
-void verificar_separador_paralelo(char *comandos[], int tamanho) {
+void verificar_separador_paralelo(char *comandos[], int tamanho, int *pid_bg) {
     char c;
     int i = 0;
     char **comandos_paralelos = malloc(sizeof(char *) * tamanho);
     for (int j = 0; j < tamanho; j++) {
         int tem_pipe = 0;
+        int background = 0;
         int redirecionamento = 0;
         int k = 0;
 
@@ -246,9 +279,14 @@ void verificar_separador_paralelo(char *comandos[], int tamanho) {
                 redirecionamento = 1;
                 break;
             }
+            if (c == '&') {
+                comando_bg(comandos[j], pid_bg);
+                background = 1;
+                break;
+            }
             k++;
         }
-        if (tem_pipe == 0) {
+        if (tem_pipe == 0 && redirecionamento == 0 && background == 0) {
             comandos_paralelos[i] = comandos[j];
             i++;
         }
@@ -331,6 +369,8 @@ void modo_interativo() {
     int seq = 1, par = 0;
     int comandos_max = 100;
 
+    pid_t pid_bg = -1;
+
     char comandos[comandos_max];
 
     printf("Entrou no modo interativo\n");
@@ -352,6 +392,13 @@ void modo_interativo() {
         } else if (strcmp("style parallel", comandos) == 0) {
             par = 1;
             seq = 0;
+        } else if (strcmp("fg", comandos) == 0 ) {
+            if (pid_bg > 0) {
+                waitpid(pid_bg, NULL, 0);
+                pid_bg = -1;
+            } else {
+                printf("Não existe trabalho em background\n");
+            }
         } else {
             char *comandos_separados[comandos_max];
             char *token = strtok(comandos, ";");
@@ -363,9 +410,9 @@ void modo_interativo() {
             }
             
             if (seq == 1) {
-                verificar_separador_sequencial(comandos_separados, i);
+                verificar_separador_sequencial(comandos_separados, i, &pid_bg);
             } else if (par == 1) {
-                verificar_separador_paralelo(comandos_separados, i);
+                verificar_separador_paralelo(comandos_separados, i, &pid_bg);
             } 
         } 
         
