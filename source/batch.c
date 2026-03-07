@@ -46,6 +46,10 @@ void rodar_comando(char *comando) {
 void modo_batch(char *argv) {
     FILE *arquivo;
     arquivo = fopen(argv, "r");
+    if (arquivo == NULL) {
+        printf("[ERRO] arquivo não encontrado\n");
+        exit(1);
+    }
     char comando[64];
 
     while(fgets(comando, 64, arquivo) != NULL) {

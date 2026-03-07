@@ -4,6 +4,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <fcntl.h>
 
 char **separar_string(char *string, char **separadas, char *separador, int max) {
     char *token = strtok(string, separador);
@@ -17,7 +18,102 @@ char **separar_string(char *string, char **separadas, char *separador, int max) 
     return separadas;
 }
 
-void comando_com_pipe(char *comando_com_pipe, int tamanho) {
+void comando_red_saida(char * comando_red) {
+    int comando_max = 64;
+    char **comandos = malloc(sizeof(char *) * comando_max);
+    comandos = separar_string(comando_red, comandos, ">", comando_max);
+
+    char **arg1 = malloc(sizeof(char *) * comando_max);
+    char **arg2 = malloc(sizeof(char *) * comando_max);
+
+    arg1 = separar_string(comandos[0], arg1, " ", comando_max);
+    arg2 = separar_string(comandos[1], arg2, " ", comando_max);
+
+    pid_t pid;
+    pid = fork();
+
+    if (pid < 0) {
+        printf("[ERRO] falha ao criar fork\n");
+        exit(1);
+    } else if (pid == 0) {
+        int fd = open(arg2[0], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        dup2(fd, STDOUT_FILENO);
+        close(fd);
+        execvp(arg1[0], arg1);
+    } else {
+        wait(NULL);
+    }
+    free(comandos);
+    free(arg1);
+    free(arg2);
+}
+
+void comando_red_entrada(char * comando_red) {
+    int comando_max = 64;
+    char **comandos = malloc(sizeof(char *) * comando_max);
+    comandos = separar_string(comando_red, comandos, "<", comando_max);
+
+    char **arg1 = malloc(sizeof(char *) * comando_max);
+    char **arg2 = malloc(sizeof(char *) * comando_max);
+
+    arg1 = separar_string(comandos[0], arg1, " ", comando_max);
+    arg2 = separar_string(comandos[1], arg2, " ", comando_max);
+
+    pid_t pid;
+    pid = fork();
+
+    if (pid < 0) {
+        printf("[ERRO] falha ao criar fork\n");
+        exit(1);
+    } else if (pid == 0) {
+        int fd = open(arg2[0], O_RDONLY);
+        if (fd == -1) {
+            printf("[ERRO] arquivo não encontrado\n");
+            exit(1);
+        } else {
+            dup2(fd, STDIN_FILENO);
+            close(fd);
+            execvp(arg1[0], arg1);
+        }
+    } else {
+        wait(NULL);
+    }
+    free(comandos);
+    free(arg1);
+    free(arg2);
+}
+
+void comando_red_saida_final(char * comando_red) {
+    int comando_max = 64;
+    char **comandos = malloc(sizeof(char *) * comando_max);
+    comandos = separar_string(comando_red, comandos, ">", comando_max);
+
+    char **arg1 = malloc(sizeof(char *) * comando_max);
+    char **arg2 = malloc(sizeof(char *) * comando_max);
+
+    arg1 = separar_string(comandos[0], arg1, " ", comando_max);
+    arg2 = separar_string(comandos[1], arg2, " ", comando_max);
+
+    pid_t pid;
+    pid = fork();
+
+    if (pid < 0) {
+        printf("[ERRO] falha ao criar fork\n");
+        exit(1);
+    } else if (pid == 0) {
+        int fd = open(arg2[0], O_WRONLY | O_APPEND | O_CREAT, 0644);
+        dup2(fd, STDOUT_FILENO);
+        close(fd);
+        execvp(arg1[0], arg1);
+    } else {
+        wait(NULL);
+    }
+    free(comandos);
+    free(arg1);
+    free(arg2);
+}
+
+void comando_com_pipe(char *comando_com_pipe) {
     int fd[2];
     int comando_max = 64;
     char **comandos = malloc(sizeof(char *) * comando_max);
@@ -88,17 +184,33 @@ void verificar_separador_sequencial(char *comandos[], int tamanho) {
     char c;
     for (int j = 0; j < tamanho; j++) {
         int tem_pipe = 0;
+        int redirecionamento = 0;
         int k = 0;
 
         while ((c = comandos[j][k]) != '\0') {
             if (c == '|') {
-                comando_com_pipe(comandos[j], 2);
+                comando_com_pipe(comandos[j]);
                 tem_pipe = 1;
+                break;
+            }
+            if (c == '>') {
+                char c_prox = comandos[j][k+1];
+                if ((c_prox) == '>') {
+                    comando_red_saida_final(comandos[j]);
+                } else {
+                    comando_red_saida(comandos[j]);
+                }
+                redirecionamento = 1;
+                break;
+            }
+            if (c == '<') {
+                comando_red_entrada(comandos[j]);
+                redirecionamento = 1;
                 break;
             }
             k++;
         }
-        if (tem_pipe == 0) {
+        if (tem_pipe == 0 && redirecionamento == 0) {
             rodar_comando_sequencial(comandos[j]);
         }
     }
@@ -110,12 +222,28 @@ void verificar_separador_paralelo(char *comandos[], int tamanho) {
     char **comandos_paralelos = malloc(sizeof(char *) * tamanho);
     for (int j = 0; j < tamanho; j++) {
         int tem_pipe = 0;
+        int redirecionamento = 0;
         int k = 0;
 
         while ((c = comandos[j][k]) != '\0') {
             if (c == '|') {
-                comando_com_pipe(comandos[j], 2);
+                comando_com_pipe(comandos[j]);
                 tem_pipe = 1;
+                break;
+            }
+            if (c == '>') {
+                char c_prox = comandos[j][k+1];
+                if ((c_prox) == '>') {
+                    comando_red_saida_final(comandos[j]);
+                } else {
+                    comando_red_saida(comandos[j]);
+                }
+                redirecionamento = 1;
+                break;
+            }
+            if (c == '<') {
+                comando_red_entrada(comandos[j]);
+                redirecionamento = 1;
                 break;
             }
             k++;
