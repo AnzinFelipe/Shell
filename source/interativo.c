@@ -5,28 +5,29 @@
 #include <unistd.h>
 #include <sys/wait.h>
 
-void comando_com_pipe(char *comandos[], int tamanho) {
+char **separar_string(char *string, char **separadas, char *separador, int max) {
+    char *token = strtok(string, separador);
+    int i = 0;
+    while (token != NULL && i < max) {
+        separadas[i] = token;
+        token = strtok(NULL, separador);
+        i++;
+    }
+    separadas[i] = NULL;
+    return separadas;
+}
+
+void comando_com_pipe(char *comando_com_pipe, int tamanho) {
     int fd[2];
     int comando_max = 64;
-    char *arg1[comando_max];
-    char *arg2[comando_max];
+    char **comandos = malloc(sizeof(char *) * comando_max);
+    comandos = separar_string(comando_com_pipe, comandos, "|", comando_max);
 
-    char *token = strtok(comandos[0], " ");
-    int i = 0;
-    while (token != NULL && i < comando_max) {
-        arg1[i] = token;
-        token = strtok(NULL, " ");
-        i++;
-    }
-    arg1[i] = NULL;
-    token = strtok(comandos[1], " ");
-    i = 0;
-    while (token != NULL && i < comando_max) {
-        arg2[i] = token;
-        token = strtok(NULL, " ");
-        i++;
-    }
-    arg2[i] = NULL;
+    char **arg1 = malloc(sizeof(char *) * comando_max);
+    char **arg2 = malloc(sizeof(char *) * comando_max);
+
+    arg1 = separar_string(comandos[0], arg1, " ", comando_max);
+    arg2 = separar_string(comandos[1], arg2, " ", comando_max);
     
     if (pipe(fd) == -1) {
         printf("[ERRO] falha ao criar pipe\n");
@@ -78,77 +79,94 @@ void comando_com_pipe(char *comandos[], int tamanho) {
         waitpid(pid1, NULL, 0);
         waitpid(pid2, NULL, 0);
     }
+    free(comandos);
+    free(arg1);
+    free(arg2);
 }
 
-void rodar_comando_sequencial(char *comando_todo, char *comandos[], int tamanho) {
+void verificar_separador_sequencial(char *comandos[], int tamanho) {
+    char c;
+    for (int j = 0; j < tamanho; j++) {
+        int tem_pipe = 0;
+        int k = 0;
 
-    int c = 0;
-    int tem_pipe = 0;
-    while (comando_todo[c] != '\0') {
-        if (comando_todo[c] == '|') {
-            tem_pipe = 1;
-            break;
-        }
-        c++;
-    }
-    
-    if (tem_pipe == 1) {
-        comando_com_pipe(comandos, tamanho);
-    } else {
-        for(int j = 0; j < tamanho; j++) {
-            int comando_max = 20;
-            char *arg[comando_max];
-
-            char *token = strtok(comandos[j], " ");
-            int i = 0;
-            while (token != NULL && i < comando_max) {
-                arg[i] = token;
-                token = strtok(NULL, " ");
-                i++;
+        while ((c = comandos[j][k]) != '\0') {
+            if (c == '|') {
+                comando_com_pipe(comandos[j], 2);
+                tem_pipe = 1;
+                break;
             }
-            arg[i] = NULL;
+            k++;
+        }
+        if (tem_pipe == 0) {
+            rodar_comando_sequencial(comandos[j]);
+        }
+    }
+}
 
-            if (strcmp(arg[0], "cd") == 0) {
-                if (arg[1] == NULL) {
-                    
-                } else if (chdir(arg[1]) != 0) {
-                    printf("Diretório não encontrado\n");
-                } else {
-                    char diretorio[1024];
-                    getcwd(diretorio, sizeof(diretorio));
-                    printf("Diretório atual: %s\n", diretorio);
-                }
-            } else {
-                pid_t pid;
-                pid = fork();
+void verificar_separador_paralelo(char *comandos[], int tamanho) {
+    char c;
+    int i = 0;
+    char **comandos_paralelos = malloc(sizeof(char *) * tamanho);
+    for (int j = 0; j < tamanho; j++) {
+        int tem_pipe = 0;
+        int k = 0;
+
+        while ((c = comandos[j][k]) != '\0') {
+            if (c == '|') {
+                comando_com_pipe(comandos[j], 2);
+                tem_pipe = 1;
+                break;
+            }
+            k++;
+        }
+        if (tem_pipe == 0) {
+            comandos_paralelos[i] = comandos[j];
+            i++;
+        }
+    }
+    rodar_comando_paralelo(comandos_paralelos, i);
+    free(comandos_paralelos);
+}
+
+void rodar_comando_sequencial(char *comandos) {
+    int comando_max = 64;
+    char **arg = malloc(sizeof(char *) * comando_max);
+
+    arg = separar_string(comandos, arg, " ", comando_max);
+
+    if (strcmp(arg[0], "cd") == 0) {
+        if (arg[1] == NULL) {
             
-                if (pid < 0) {
-                    printf("[ERRO] falha ao criar fork\n");
-                    exit(1);
-                } else if (pid == 0) {
-                    execvp(arg[0], arg);
-                } else if (pid > 0) {
-                    wait(NULL);
-                }
-            }
+        } else if (chdir(arg[1]) != 0) {
+            printf("Diretório não encontrado\n");
+        } else {
+            char diretorio[1024];
+            getcwd(diretorio, sizeof(diretorio));
+            printf("Diretório atual: %s\n", diretorio);
+        }
+    } else {
+        pid_t pid;
+        pid = fork();
+    
+        if (pid < 0) {
+            printf("[ERRO] falha ao criar fork\n");
+            exit(1);
+        } else if (pid == 0) {
+            execvp(arg[0], arg);
+        } else if (pid > 0) {
+            wait(NULL);
         }
     }
+    free(arg);
 }
 
 void rodar_comando_paralelo(char *comandos[], int tamanho) {
-
     for (int j = 0; j < tamanho; j++) {
         int comando_max = 20;
-        char *arg[comando_max];
-    
-        char *token = strtok(comandos[j], " ");
-        int i = 0;
-        while (token != NULL && i < comando_max) {
-            arg[i] = token;
-            token = strtok(NULL, " ");
-            i++;
-        }
-        arg[i] = NULL;
+        char **arg = malloc(sizeof(char *) * comando_max);
+
+        arg = separar_string(comandos[j], arg, " ", comando_max);
 
         if (strcmp(arg[0], "cd") == 0) {
             if (arg[1] == NULL) {
@@ -171,6 +189,7 @@ void rodar_comando_paralelo(char *comandos[], int tamanho) {
                 execvp(arg[0], arg);
                 exit(0);
             } else {
+                free(arg);
                 continue;
             }
         }
@@ -185,7 +204,6 @@ void modo_interativo() {
     int comandos_max = 100;
 
     char comandos[comandos_max];
-    char comandos_copia[comandos_max];
 
     printf("Entrou no modo interativo\n");
     while(1) {
@@ -207,20 +225,19 @@ void modo_interativo() {
             par = 1;
             seq = 0;
         } else {
-            strcpy(comandos_copia, comandos);
             char *comandos_separados[comandos_max];
-            char *token = strtok(comandos, ";|");
+            char *token = strtok(comandos, ";");
             int i = 0;
             while (token != NULL && i < comandos_max) {
                 comandos_separados[i] = token;
-                token = strtok(NULL, ";|");
+                token = strtok(NULL, ";");
                 i++;
             }
             
             if (seq == 1) {
-                rodar_comando_sequencial(comandos_copia, comandos_separados, i);
+                verificar_separador_sequencial(comandos_separados, i);
             } else if (par == 1) {
-                rodar_comando_paralelo(comandos_separados, i);
+                verificar_separador_paralelo(comandos_separados, i);
             } 
         } 
         
