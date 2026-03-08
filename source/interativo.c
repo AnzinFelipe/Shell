@@ -398,7 +398,6 @@ void modo_interativo() {
 
     char comandos[comandos_max];
 
-    printf("Entrou no modo interativo\n");
     while(1) {
         if (seq == 1) {
             printf("Shell seq> ");
