@@ -12,6 +12,8 @@ int main(int argc, char *argv[]) {
         modo_interativo();
     } else if (argc == 2) {
         modo_batch(argv[1]);
+    } else {
+        printf("[ERRO] Quantidade de argumentos inválida\n");
     }
 
     return 0;
