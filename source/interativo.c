@@ -35,6 +35,8 @@ void comando_bg(char *comando, int *pid_bg) {
         exit(1);
     } else if (pid == 0) {
         execvp(arg[0], arg);
+        printf("Comando inexistente\n");
+        exit(1);
     } else {
         *pid_bg = pid;
         printf("[1] %d\n", *pid_bg);
@@ -66,6 +68,8 @@ void comando_red_saida(char * comando_red) {
         dup2(fd, STDOUT_FILENO);
         close(fd);
         execvp(arg1[0], arg1);
+        printf("Comando inexistente\n");
+        exit(1);
     } else {
         wait(NULL);
     }
@@ -94,12 +98,14 @@ void comando_red_entrada(char * comando_red) {
     } else if (pid == 0) {
         int fd = open(arg2[0], O_RDONLY);
         if (fd == -1) {
-            printf("[ERRO] arquivo não encontrado\n");
+            printf("Arquivo não encontrado\n");
             exit(1);
         } else {
             dup2(fd, STDIN_FILENO);
             close(fd);
             execvp(arg1[0], arg1);
+            printf("Comando inexistente\n");
+            exit(1);
         }
     } else {
         wait(NULL);
@@ -131,6 +137,8 @@ void comando_red_saida_final(char * comando_red) {
         dup2(fd, STDOUT_FILENO);
         close(fd);
         execvp(arg1[0], arg1);
+        printf("Comando inexistente\n");
+        exit(1);
     } else {
         wait(NULL);
     }
@@ -179,6 +187,8 @@ void comando_com_pipe(char *comando_com_pipe) {
             close(fd[1]);
             
             execvp(arg1[0], arg1);
+            printf("Comando inexistente\n");
+            exit(1);
         } else {
             close(fd[1]);
         }
@@ -194,6 +204,8 @@ void comando_com_pipe(char *comando_com_pipe) {
             close(fd[0]);
 
             execvp(arg2[0], arg2);
+            printf("Comando inexistente\n");
+            exit(1);
         } else {
             close(fd[0]);
         }
@@ -311,6 +323,8 @@ void rodar_comando_sequencial(char *comandos) {
             getcwd(diretorio, sizeof(diretorio));
             printf("Diretório atual: %s\n", diretorio);
         }
+    } else if (strcmp(arg[0], "exit") == 0) {
+        exit(0);
     } else {
         pid_t pid;
         pid = fork();
@@ -320,6 +334,8 @@ void rodar_comando_sequencial(char *comandos) {
             exit(1);
         } else if (pid == 0) {
             execvp(arg[0], arg);
+            printf("Comando inexistente\n");
+            exit(1);
         } else if (pid > 0) {
             wait(NULL);
         }
@@ -328,6 +344,8 @@ void rodar_comando_sequencial(char *comandos) {
 }
 
 void rodar_comando_paralelo(char *comandos[], int tamanho) {
+    int encerrar = 0;
+
     for (int j = 0; j < tamanho; j++) {
         int comando_max = 20;
         char **arg = malloc(sizeof(char *) * comando_max);
@@ -344,6 +362,8 @@ void rodar_comando_paralelo(char *comandos[], int tamanho) {
                 getcwd(diretorio, sizeof(diretorio));
                 printf("Diretório atual: %s\n", diretorio);
             }
+        } else if (strcmp(arg[0], "exit") == 0) {
+            encerrar = 1;
         } else {
             pid_t pid;
             pid = fork();
@@ -354,6 +374,8 @@ void rodar_comando_paralelo(char *comandos[], int tamanho) {
             } else if (pid == 0) {
                 execvp(arg[0], arg);
                 exit(0);
+                printf("Comando inexistente\n");
+                exit(1);
             } else {
                 free(arg);
                 continue;
@@ -362,6 +384,9 @@ void rodar_comando_paralelo(char *comandos[], int tamanho) {
     }
     for (int j = 0; j < tamanho; j++) {
         wait(NULL);
+    }
+    if (encerrar = 1) {
+        exit(0);
     }
 }
 
@@ -381,7 +406,11 @@ void modo_interativo() {
             printf("Shell par> ");
         }
 
-        fgets(comandos, comandos_max, stdin);
+        if (fgets(comandos, comandos_max, stdin) == NULL) {
+            printf("\n");
+            break;
+        }
+        
         comandos[strcspn(comandos, "\n")] = '\0';
 
         if (strcmp("exit", comandos) == 0) {
@@ -400,6 +429,35 @@ void modo_interativo() {
                 printf("Não existe trabalho em background\n");
             }
         } else {
+
+            int c = 0;
+            while(comandos[c] != '\0') {
+                if (comandos[c] == ';') {
+                    if (comandos[c - 1] == ' ') {
+                        printf("[ERRO] espaço antes de ;\n");
+                        exit(1);
+                    }
+                    if (comandos[c + 1] != ' ') {
+                        printf("[ERRO] espaço após ; está faltando\n");
+                        exit(1);
+                    }
+                }
+                c++;
+            }
+
+            c = 0;
+            int apenas_espaco = 1;
+            while(comandos[c] != '\0') {
+                if (comandos[c] != ' ') {
+                    apenas_espaco = 0;
+                }
+                c++;
+            }
+            if (apenas_espaco == 1) {
+                printf("[ERRO] comando vazio\n");
+                exit(1);
+            }
+
             char *comandos_separados[comandos_max];
             char *token = strtok(comandos, ";");
             int i = 0;

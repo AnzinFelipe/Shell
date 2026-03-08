@@ -37,6 +37,8 @@ void rodar_comando(char *comando) {
             exit(1);
         } else if (pid == 0) {
             execvp(arg[0], arg);
+            printf("Comando inexistente\n");
+            exit(1);
         } else if (pid > 0) {
             wait(NULL);
         }
@@ -44,6 +46,8 @@ void rodar_comando(char *comando) {
 }
 
 void modo_batch(char *argv) {
+    int tem_exit = 0;
+
     FILE *arquivo;
     arquivo = fopen(argv, "r");
     if (arquivo == NULL) {
@@ -54,6 +58,19 @@ void modo_batch(char *argv) {
 
     while(fgets(comando, 64, arquivo) != NULL) {
         comando[strcspn(comando, "\n")] = '\0';
+        if (strcmp(comando, "exit") == 0) {
+            tem_exit = 1;
+            break;
+        }
+    }
+    rewind(arquivo);
+    if (tem_exit == 0) {
+        printf("[ERRO] arquivo batchfile sem exit\n");
+        exit(1);
+    } 
+    
+    while(fgets(comando, 64, arquivo) != NULL) {
+        comando[strcspn(comando, "\n")] = '\0';
         printf("%s\n", comando);
     }
     rewind(arquivo);
@@ -61,9 +78,11 @@ void modo_batch(char *argv) {
     while(fgets(comando, 64, arquivo) != NULL) {
         comando[strcspn(comando, "\n")] = '\0';
         if (strcmp(comando, "exit") == 0) {
+            tem_exit = 1;
             break;
         }
         rodar_comando(comando);
     }
+
     fclose(arquivo);
 }
